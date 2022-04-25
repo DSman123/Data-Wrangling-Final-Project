@@ -1,0 +1,101 @@
+---
+title: "Passion & Polarization: Using Reddit Data to Examine Trends in Thread Comment Behavior"
+subtitle: "Joel Cabrera, Neha Agarwal, & David Amiel"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+    theme: yeti
+date: 'Data Wrangling & Husbandry: Spring 2022'
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+# Install and Import Necessary Packages
+#install.packages("RedditExtractoR")
+#install.packages("tidyverse")
+#install.packages("tidytext")
+#install.packages("textdata")
+library(RedditExtractoR)
+library(tidytext)
+library(textdata)
+library(tidyverse)
+```
+
+# Introduction
+From behind the screen of our personal devices, and often under the guise of anonymity, we are able to share our thoughts with the world in seconds. Although this increased connectivity has lead to global innovation^[C]^, such ease and namelessness has created a culture online where individuals feel more able to express negative, hurtful comments^[C]^. In this project, we will examine trends in online comments using Reddit as a sample for general internet behavior. Although we employ convenience sampling^[C]^, we believe that the data explored throughout this report illustrates larger trends and behaviors seen elsewhere online. 
+
+Our project starts narrow: we first look at Reddit's most unpopular post^[C]^ to see what we can learn. We look at what words or phrases are most popular in negative and positive comments and the relationship to how they are received by viewers. We also look to see if negative comments receive more "likes" when they respond to posts that are not well received? That is, does an attack on an unpopular opinion receive more likes? We attempt to capture this idea in a "polarization quotient," which is a quantitative descriptor of the relationship among a parent and child posts' positivity or negativity and their net up/down-votes.
+
+Using the findings from our specific case study, we'll examine what the derived polarization quotient looks like for varying online topics --- politics, climate change, food insecurity, and the pandemic. We'll look to see whether different online topics tend to have more polarized comments - is an attack on an unpopular opinion received differently depending on the topic? Which topics in particular tend to foster these controversial comment threads?
+
+Finally, we'll conclude by looking at findings holistically and discuss their broader implications. Based on the findings from the analyses described in this report, we'll present opportunities for further exploration and potential shortcomings (and our proposed solutions) of this project.
+
+# Case Study: EA's Blunder
+In 2017, Electronic Arts (EA) released the sequel to a popular videogame - Battlefront II. Unlike its prequel, the game was relatively unpopular and generated a lot of backlash from the gaming community. One player took to Reddit to express their disdain, and EA issued a response:
+
+>
+>> Seriously? I paid 80$ to have Vader locked? This is a joke. I'll be contacting EA support for a refund... I can't even playing f***ing Darth Vader?!?!? Disgusting. This age of "micro-transactions" has gone WAY too far. Leave it to EA though to stretch the boundaries.
+>>
+>> --- MBMMaverick
+>
+>
+>> The intent is to provide players with a sense of pride and accomplishment for unlocking different heroes.
+>> 
+>> As for cost, we selected initial values based upon data from the Open Beta and other adjustments made to milestone rewards before launch. Among other things, we're looking at average per-player credit earn rates on a daily basis, and we'll be making constant adjustments to ensure that players have challenges that are compelling, rewarding, and of course attainable via gameplay.
+>> 
+>>We appreciate the candid feedback, and the passion the community has put forth around the current topics here on Reddit, our forums and across numerous social media outlets.
+>>
+>>Our team will continue to make changes and monitor community feedback and update everyone as soon and as often as we can.
+>>
+>> --- EA Community Team 
+>
+
+At the time of this project, EA's response remains the single most downvoted Reddit post across their entire site, with a net score (Upvotes - Downvotes) of $-667669$. For comparison, the original post has a net score of $200000$. 
+
+## Research Goals
+The following analysis is not related to the topic of the post; rather, this post and the database of 2.8k comments were selected because the thread offers a large sample with lots of user interaction. This case study seeks to answer the following research questions:
+
+1. What relationships exist among the overall sentiment of a Reddit reply, the net score of the post it is in response to, and the net vote the post receives?
+
+2. How can the above relationship be effectively captured into a quantitative, descriptive metric (the Polarization Quotient)?
+
+3. What are the characteristics of replies with the highest polarization rating: topics, frequently used words, common phrases?
+
+## Data Import and Manipulation {.tabset}
+To perform the analysis, we will need to examine all comment text (including comments of comments), their net scores, and their relationship to comments around them. We used the RedditExtractoR package^[C]^ to scrape this data. The below script is how we accomplished this; note that we use similar code throughout this project, but we will only show it this once.
+
+We also created several variables that are used in the analysis
+
+#### Script
+
+```{r data_import, echo=TRUE, include=TRUE}
+commentData <- get_thread_content("https://www.reddit.com/r/StarWarsBattlefront/comments/7cff0b/seriously_i_paid_80_to_have_vader_locked/dppum98/")$comments
+workingDF <- commentData %>% mutate(wdcount = str_count(comment, '\\w+')) %>% filter(wdcount >= 10) %>% select(comment_id, comment, score) 
+temp <- workingDF %>% unnest_tokens(word, comment) %>% anti_join(stop_words) %>% inner_join(get_sentiments("bing")) %>% count(comment_id, sentiment) %>% pivot_wider(values_from = "n", names_from = "sentiment")
+workingDF <- inner_join(workingDF, temp, by ="comment_id") %>% mutate_all(~replace(., is.na(.), 0)) %>% mutate(sentiment = positive - negative, score_per_sentiment = score/sentiment)
+```
+
+
+
+#### Resulting Tibble
+
+```{r EAcomment_df, echo=FALSE, include=TRUE}
+glimpse(workingDF)
+```
+
+
+### Calculated Variables
+
+
+
+
+# References
+(will clean this up at the end so that we don't have to constantly re-number)
+
+RedditExtractoR: https://cran.r-project.org/web/packages/RedditExtractoR/index.html
+
+
+
+
+
