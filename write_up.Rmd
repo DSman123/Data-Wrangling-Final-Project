@@ -1,101 +1,189 @@
 ---
-title: "Passion & Polarization: Using Reddit Data to Examine Trends in Thread Comment Behavior"
-subtitle: "Joel Cabrera, Neha Agarwal, & David Amiel"
+title: "Polarization: Using Reddit Data to Examine Trends in Thread Comment Behavior"
+author: "Joel Cabrera, Neha Agarwal, & David Amiel"
+subtitle: 'Data Wrangling & Husbandry: Spring 2022'
+date: "4/8/2022"
 output:
   html_document:
     toc: true
     toc_float: true
     theme: yeti
-date: 'Data Wrangling & Husbandry: Spring 2022'
 ---
-
-```{r setup, include=FALSE}
+```{r setup, include=FALSE, echo=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
-# Install and Import Necessary Packages
-#install.packages("RedditExtractoR")
-#install.packages("tidyverse")
-#install.packages("tidytext")
-#install.packages("textdata")
 library(RedditExtractoR)
 library(tidytext)
 library(textdata)
 library(tidyverse)
+library(ggpubr)
 ```
 
 # Introduction
-From behind the screen of our personal devices, and often under the guise of anonymity, we are able to share our thoughts with the world in seconds. Although this increased connectivity has lead to global innovation^[C]^, such ease and namelessness has created a culture online where individuals feel more able to express negative, hurtful comments^[C]^. In this project, we will examine trends in online comments using Reddit as a sample for general internet behavior. Although we employ convenience sampling^[C]^, we believe that the data explored throughout this report illustrates larger trends and behaviors seen elsewhere online. 
+From behind the screen of our personal devices, we are able to share our thoughts with the world in seconds. Such ease and anonymity has created a culture where individuals feel more able to express negative, often hurtful, opinions and spead sentiments of racism^[1]^, xenophobia^[2]^, and homophobia^[3]^, among others. At the same time that access to social media is becoming more and more available, we see a stark increase in polarization in our society. The gap between sides of an issue is widening, and productive conversations among individuals with differing opinions are becoming less common. 
 
-Our project starts narrow: we first look at Reddit's most unpopular post^[C]^ to see what we can learn. We look at what words or phrases are most popular in negative and positive comments and the relationship to how they are received by viewers. We also look to see if negative comments receive more "likes" when they respond to posts that are not well received? That is, does an attack on an unpopular opinion receive more likes? We attempt to capture this idea in a "polarization quotient," which is a quantitative descriptor of the relationship among a parent and child posts' positivity or negativity and their net up/down-votes.
+Of course, these two phenomena cannot be unrelated. Over a decade of research points to the complex relationship that exists between social media and polarization.^[4]^
 
-Using the findings from our specific case study, we'll examine what the derived polarization quotient looks like for varying online topics --- politics, climate change, food insecurity, and the pandemic. We'll look to see whether different online topics tend to have more polarized comments - is an attack on an unpopular opinion received differently depending on the topic? Which topics in particular tend to foster these controversial comment threads?
+In this project, we attempt to use data science techniques in R^[5]^ to explore, and potentially model, internet polarization. To do so, we have chosen to examine thread content, sentiment, and post popularity on Reddit, a popular networking forum site. We believe this choice in platform is both analytically and theoretically justified, as we are able to quickly glean large amounts of data from the site; its contents have already been shown to aid in predictive models of human behavior^[6]^, and; the platform is home to some of the negative sentiments we hope to examine, like misogyny.^[7]^
 
-Finally, we'll conclude by looking at findings holistically and discuss their broader implications. Based on the findings from the analyses described in this report, we'll present opportunities for further exploration and potential shortcomings (and our proposed solutions) of this project.
+# Project Overview
+We began our project with an exploratory case study of what we had hoped to be a polarizing and charged thread on Reddit. The intention was to practice scraping the web data, performing analyses and creating visualizations, and build an initial predictive model regarding post popularity. However, our model was less successful than we had hoped, and we encountered a number of analytic shortcomings along the way.
+
+Our initial Reddit thread was selected for the initial exploration because it contains the single most down-voted post on the history of the site. However, that was not indicative of the polarization we were looking for. In fact, the extremely unpopular opinion that originally attracted us to the thread was likely the reason we were unsuccessful: in being such an unpopular opinion, there is a consensus among users. Since everyone agreed to dislike the post, there wasn't much room for polarization.
+
+We then rethought the strategy, instead turning towards threads based on their topic, rather than basing the decision off a metric like post popularity. We turned to two more polarizing themes: climate change and politics.^[8]^
 
 # Case Study: EA's Blunder
-In 2017, Electronic Arts (EA) released the sequel to a popular videogame - Battlefront II. Unlike its prequel, the game was relatively unpopular and generated a lot of backlash from the gaming community. One player took to Reddit to express their disdain, and EA issued a response:
+Although this case study was ultimately relatively uninformative, we include it in this report as it illustrates our initial work of scraping web data, creating necessary ancillary and analytic variables, and the process and thinking behind the decision to turn our attention elsewhere. Further, it was the topic originally outlined in our project proposal, so we felt the need to give it some attention.
 
->
->> Seriously? I paid 80$ to have Vader locked? This is a joke. I'll be contacting EA support for a refund... I can't even playing f***ing Darth Vader?!?!? Disgusting. This age of "micro-transactions" has gone WAY too far. Leave it to EA though to stretch the boundaries.
->>
->> --- MBMMaverick
->
->
->> The intent is to provide players with a sense of pride and accomplishment for unlocking different heroes.
->> 
->> As for cost, we selected initial values based upon data from the Open Beta and other adjustments made to milestone rewards before launch. Among other things, we're looking at average per-player credit earn rates on a daily basis, and we'll be making constant adjustments to ensure that players have challenges that are compelling, rewarding, and of course attainable via gameplay.
->> 
->>We appreciate the candid feedback, and the passion the community has put forth around the current topics here on Reddit, our forums and across numerous social media outlets.
->>
->>Our team will continue to make changes and monitor community feedback and update everyone as soon and as often as we can.
->>
->> --- EA Community Team 
->
+## Thread Background
+In 2017, Electronic Arts (EA) released the sequel to a popular videogame - Battlefront II. Unlike its prequel, the game was relatively unpopular and generated a lot of backlash from the gaming community. One player took to Reddit to express their disdain, and EA issued a response. The specific complaint that they responded to dealt with a player mentioning that Darth Vader, a popular character in the franchise, was locked behind a paywall, even after paying for the game. EA's response suggested that their thinking behind this decision was to help players have a sense of "pride and accomplishment" for unlocking such characters. The thread text is below.^[9]^
 
-At the time of this project, EA's response remains the single most downvoted Reddit post across their entire site, with a net score (Upvotes - Downvotes) of $-667669$. For comparison, the original post has a net score of $200000$. 
+**Seriously? I paid 80$ to have Vader locked?** This is a joke. I'll be contacting EA support for a refund... I can't even playing f***ing Darth Vader?!?!? Disgusting. This age of "micro-transactions" has gone WAY too far. Leave it to EA though to stretch the boundaries.
 
-## Research Goals
-The following analysis is not related to the topic of the post; rather, this post and the database of 2.8k comments were selected because the thread offers a large sample with lots of user interaction. This case study seeks to answer the following research questions:
+"The intent is to provide players with a sense of pride and accomplishment for unlocking different heroes.
 
-1. What relationships exist among the overall sentiment of a Reddit reply, the net score of the post it is in response to, and the net vote the post receives?
+As for cost, we selected initial values based upon data from the Open Beta and other adjustments made to milestone rewards before launch. Among other things, we're looking at average per-player credit earn rates on a daily basis, and we'll be making constant adjustments to ensure that players have challenges that are compelling, rewarding, and of course attainable via gameplay. 
 
-2. How can the above relationship be effectively captured into a quantitative, descriptive metric (the Polarization Quotient)?
+We appreciate the candid feedback, and the passion the community has put forth around the current topics here on Reddit, our forums and across numerous social media outlets.
 
-3. What are the characteristics of replies with the highest polarization rating: topics, frequently used words, common phrases?
+--- EA Community Team"
 
-## Data Import and Manipulation {.tabset}
-To perform the analysis, we will need to examine all comment text (including comments of comments), their net scores, and their relationship to comments around them. We used the RedditExtractoR package^[C]^ to scrape this data. The below script is how we accomplished this; note that we use similar code throughout this project, but we will only show it this once.
+The original post has about 200,000 upvotes, while EA's response holds the record for downvotes, with a net score at nearly -700,000.
 
-We also created several variables that are used in the analysis
+## Data Scraping
+To assist in gathering data from Reddit, we found that any Reddit page can be 'converted' into the JSON format simply by adding a ".json" to the end of the URL. Using R, we imported the JSON file into a dataframe. However, the resulting structure was largely un-usable, as special characters within posts, usernames, or otherwise seemed to cause perturbation the structure of the data. However, after some online research, we were able to locate RedditExtractoR^[10]^, a data extraction toolkit that allowed us to quickly pull in the data. Comments were stored as a sub-table within the extracted data, and we were quickly able to clean up any messy imports.
 
-#### Script
+```{r caseStudy_dataScraping, echo=FALSE, include=FALSE}
 
-```{r data_import, echo=TRUE, include=TRUE}
-commentData <- get_thread_content("https://www.reddit.com/r/StarWarsBattlefront/comments/7cff0b/seriously_i_paid_80_to_have_vader_locked/dppum98/")$comments
-workingDF <- commentData %>% mutate(wdcount = str_count(comment, '\\w+')) %>% filter(wdcount >= 10) %>% select(comment_id, comment, score) 
-temp <- workingDF %>% unnest_tokens(word, comment) %>% anti_join(stop_words) %>% inner_join(get_sentiments("bing")) %>% count(comment_id, sentiment) %>% pivot_wider(values_from = "n", names_from = "sentiment")
-workingDF <- inner_join(workingDF, temp, by ="comment_id") %>% mutate_all(~replace(., is.na(.), 0)) %>% mutate(sentiment = positive - negative, score_per_sentiment = score/sentiment)
+# Import Comments from Target Thread
+commentData <- tibble(get_thread_content("https://www.reddit.com/r/StarWarsBattlefront/comments/7cff0b/seriously_i_paid_80_to_have_vader_locked/dppum98/")$comments) %>% select(comment_id, comment, score)
+
 ```
 
+## Modifying the Tibble
+After gathering the comments in a tibble, we were able to use the tidytext^[11]^ package to pass each comment through the Bing, NRC, and AFINN lexicons for future sentiment analysis. To do so, three copies of the commentData tibble were created, and each was passed through one of the three lexicons. A copy of the one-word-per-row sentiment data from each lexicon was retained for future analysis. An inner join combined the original commentData with all sentiment data. Note that both the Bing and NRC lexicons have positive and negative sentiment data, and both values were retained. Based on comment data, words like "game" and "hero" were added to a custom stop word library (in this thread, a "hero" is a functional unit of the game, and does not carry the positive connotation assigned to it by lexicons).
+
+After sentiment analysis information was completed, several additional variables were added to the dataset, including each post's parent popularity score (defined by the net up/down votes) and AFINN sentiment (which required some string manipulation of the comment_id using the stringr^[12]^ package), and a net sentiment score from both the Bing and NRC lexicons (defined as positive - negative). Below is a glimipse of the resulting tibble, which is used for all subsequent analyses.
+
+```{r caseStudy_sentAnalysis&cleaning, echo=FALSE, include=FALSE}
+
+# Custom Stopword Library
+modStop <- bind_rows(stop_words, tibble(c("game", "gaming", "hero", "heroes", "ea", "pride", "accomplishment"))%>%mutate(lexicon="MANUAL"))
+
+# Gather Sentiments for Each Comment from Bing, NRC, and AFINN 
+nrcRaw    <- commentData %>% unnest_tokens(word, comment) %>% anti_join(bind_rows(modStop)) %>% inner_join(get_sentiments("nrc")) 
+afinnRaw  <- commentData %>% unnest_tokens(word, comment) %>% anti_join(modStop) %>% inner_join(get_sentiments("afinn"))
+bingRaw   <- commentData %>% unnest_tokens(word, comment) %>% anti_join(modStop) %>% inner_join(get_sentiments("bing")) 
+
+afinnJoin <- afinnRaw  %>% group_by(comment_id)         %>% summarize(afinn=sum(value))
+bingJoin  <- bingRaw   %>% count(comment_id, sentiment) %>% pivot_wider(values_from = "n", names_from = "sentiment")
+nrcJoin   <- nrcRaw    %>% count(comment_id, sentiment) %>% pivot_wider(values_from = "n", names_from = "sentiment") %>% 
+                           mutate(nrcPos=positive, nrcNeg=negative) %>% select(-`positive`, -`negative`)
 
 
-#### Resulting Tibble
+# Combine Data into a Working Tibble
+workingData <- inner_join(commentData, nrcJoin, by="comment_id") %>% inner_join(bingJoin, by="comment_id") %>% inner_join(afinnJoin, by="comment_id")
 
-```{r EAcomment_df, echo=FALSE, include=TRUE}
-glimpse(workingDF)
+# Calculate Ancillary Variables
+workingData <- workingData %>% mutate(nrcNetSent  = nrcPos - nrcNeg, 
+                                      bingNetSent = positive - negative,
+                                      parent_ID   = substr(comment_id, 1, regexpr("\\_[^\\_]*$", comment_id)-1))
+workingData <- workingData %>% mutate(parentNRC   = workingData[match(parent_ID, workingData$comment_id), 16], 
+                                      parentBing  = workingData[match(parent_ID, workingData$comment_id), 17],
+                                      parentScore = workingData[match(parent_ID, workingData$comment_id), 3], 
+                                      logScore    = log(abs(score))) %>% mutate_all(~replace(., is.na(.), 0))
+
 ```
 
+```{r caseStudy_glimpse, include=TRUE, echo=FALSE}
+glimpse(workingData)
+```
 
-### Calculated Variables
+## Exploring the Dataset {.tabset}
+To get a better understanding for the comment section of the thread we are working with, we created numerous visualizations that highlight frequences, descriptive, and trends in the data with respect to word frequency, post popularity, and post sentiment.
+
+### Descriptives: Sentiment
+First, to see an overall picture of the sentiment of the thread, we created a simple histogram that maps overall post sentiment. Since word negative/positive binaries tended to 'cancel out' more frequently than the afinn database, the afinn data was used in the below histogram. We see that many posts are concentrated around neutral overall sentiment, but the thread is generally skewed negative. This makes sense, given that most of the thread are individuals criticizing EA's response.
+
+```{r caseStudy_visualizations_sentiment1, echo=FALSE, include=TRUE, warnings=FALSE}
+
+ggplot(data=workingData, mapping=aes(afinn)) + geom_histogram(binwidth = 1) + labs(x="Overall Post Sentiment (AFINN Subscore)", y="Frequency (n, number of posts)", title = "Distribution of Post Sentiment", subtitle = "Case Study: StarWars Battlefront Reddit Thread")
+
+```
+We were also interested in leveraging the specific sentiment data provided by the NRC lexicon to see if specific sentiments were more or less frequently observed than others. Bear in mind when interpreting the below (multiple plots were joined together using the ggpubr^[13]^ package) the relative frequency of positve and negative posts. 
+
+```{r caseStudy_visualizations_sentiment2, echo=FALSE, include=TRUE, warnings=FALSE}
+data<- workingData %>% mutate(binary = ifelse(afinn>0, "Positive", "Negative"))
+
+anticipation <- ggplot(data=data, mapping=aes(anticipation, color=binary)) + geom_histogram(fill="white", alpha=0.5, position = "identity") + labs(y="Frequency", x="Anticipation Score (NRC)")
+
+joy <- ggplot(data=data, mapping=aes(joy, color=binary)) + geom_histogram(fill="white", alpha=0.5, position = "identity") + labs(y="Frequency", x="Joy Score (NRC)")
+
+surprise <- ggplot(data=data, mapping=aes(surprise, color=binary)) + geom_histogram(fill="white", alpha=0.5, position ="identity") + labs(y="Frequency", x="Surprise Score (NRC)")
+
+trust <- ggplot(data=data, mapping=aes(trust, color=binary)) + geom_histogram(fill="white", alpha=0.5, position = "identity") + labs(y="Frequency", x="Trust Score (NRC)")
+
+anger <- ggplot(data=data, mapping=aes(anger, color=binary)) + geom_histogram(fill="white", alpha=0.5, position = "identity") + labs(y="Frequency", x="Anger Score (NRC)")
+
+disgust <- ggplot(data=data, mapping=aes(disgust, color=binary)) + geom_histogram(fill="white", alpha=0.5, position = "identity") + labs(y="Frequency", x="Disgust Score (NRC)")
+
+fear <- ggplot(data=data, mapping=aes(fear, color=binary)) + geom_histogram(fill="white", alpha=0.5, position = "identity") + labs(y="Frequency", x="Fear Score (NRC)")
+
+sadness <- ggplot(data=data, mapping=aes(sadness, color=binary)) + geom_histogram(fill="white", alpha=0.5, position = "identity") + labs(y="Frequency", x="Sadness Score (NRC)")
 
 
+ggarrange(anticipation, joy, surprise, trust, anger, disgust, fear, sadness + rremove("y.text"), 
+          ncol = 3, nrow = 3)
 
+
+```
+
+### Descriptives: Word Frequencies
+reiuwfouncufiwean
+
+### Trends: Popularity
+ijijijiji
+
+## Model Creation
+
+## Case Study Takeaways
+
+# Broader Exploration: "The Weather and Everybody's Health" 
+
+## In Brief: Other Analyzed Threads
+
+## Assessing Model Applicability
+
+# Synthesis: Key Takeaways
 
 # References
-(will clean this up at the end so that we don't have to constantly re-number)
 
-RedditExtractoR: https://cran.r-project.org/web/packages/RedditExtractoR/index.html
+[1] Matamoros-Fernández, A., & Farkas, J. (2021). Racism, Hate Speech, and Social Media: A Systematic Review and Critique. *Television & New Media, 22*(2), 205–224. https://doi.org/10.1177/1527476420982230
 
+[2] Chenzi, V. (2021). Fake news, social media and xenophobia in South Africa. *African Identities, 19*(4), 502-521. https://doi.org/10.1080/14725843.2020.1804321 
 
+[3] Ștefăniță, O., & Buf, D.-M.. (2021). Hate Speech in Social Media and Its Effects on the LGBT Community: A Review of the Current Research. *Romanian Journal of Communication and Public Relations, 23*(1), 47. https://doi.org/10.21018/rjcpr.2021.1.322
 
+[4] Tucker, Guess, A., Barbera, P., Vaccari, C., Siegel, A., Sanovich, S., Stukal, D., & Nyhan, B. (2018). Social Media, Political Polarization, and Political Disinformation: A Review of the Scientific Literature. *SSRN Electronic Journal.* https://doi.org/10.2139/ssrn.3144139
 
+[5] R Core Team (2022). R: A language and environment for statistical computing. R Foundation for Statistical Computing, Vienna, Austria. URL https://www.R-project.org/.
 
+[6] Gjurković, M., & Šnajder, J. (2018). *Reddit: A Gold Mine for Personality Prediction.* https://doi.org/10.18653/v1/W18-1112 
+
+[7] Farrell, T., Fernandez, M., Novotny, J., & Alani, H. (2019). *Exploring Misogyny across the Manosphere in Reddit* Proceedings of the 10th ACM Conference on Web Science, Boston, Massachusetts, USA. https://doi.org/10.1145/3292522.3326045
+
+[8] Kubin, E., & von Sikorski, C. (2021). The role of (social) media in political polarization: a systematic review. *Annals of the International Communication Association, 45*(3), 188-206. https://doi.org/10.1080/23808985.2021.1976070 
+
+[9] Reddit's Most Downvoted Comment: https://www.reddit.com/r/StarWarsBattlefront/comments/7cff0b/seriously_i_paid_80_to_have_vader_locked/dppum98/
+
+[10] Rivera, Ivan (2022). RedditExtractoR: Reddit Data Extraction Toolkit. R package version 3.0.6. https://CRAN.R-project.org/package=RedditExtractoR
+
+[11] Silge J, Robinson D (2016). “tidytext: Text Mining and Analysis Using Tidy Data Principles in R.” _JOSS_,
+*1*(3). doi: 10.21105/joss.00037 (URL: https://doi.org/10.21105/joss.00037), <URL:
+http://dx.doi.org/10.21105/joss.00037>.
+
+[12] Wickham, Hadley (2019). stringr: Simple, Consistent Wrappers for Common String Operations. R package version 1.4.0.
+  https://CRAN.R-project.org/package=stringr
+  
+[13] Kassambara, Alboukadel (2020). ggpubr: 'ggplot2' Based Publication Ready Plots. R package version 0.4.0.
+  https://CRAN.R-project.org/package=ggpubr
