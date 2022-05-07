@@ -1,0 +1,371 @@
+---
+title: "Polarization: Using Reddit Data to Examine Trends in Thread Comment Behavior"
+author: "Joel Cabrera, Neha Agarwal, & David Amiel"
+subtitle: 'Data Wrangling & Husbandry: Spring 2022'
+date: "4/8/2022"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+    theme: yeti
+---
+```{r setup, include=FALSE, echo=FALSE, warning=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(RedditExtractoR)
+library(tidytext)
+library(textdata)
+library(tidyverse)
+library(ggpubr)
+library(wordcloud)
+```
+
+# Introduction
+From behind the screen of our personal devices, we are able to share our thoughts with the world in seconds. Such ease and anonymity has created a culture where individuals feel more able to express negative, often hurtful, opinions and spead sentiments of racism^[1]^, xenophobia^[2]^, and homophobia^[3]^, among others. At the same time that access to social media is becoming more and more available, we see a stark increase in polarization in our society. The gap between sides of an issue is widening, and productive conversations among individuals with differing opinions are becoming less common. 
+
+Of course, these two phenomena cannot be unrelated. Over a decade of research points to the complex relationship that exists between social media and polarization.^[4]^
+
+In this project, we attempt to use data science techniques in R^[5]^ to explore, and potentially model, internet polarization. To do so, we have chosen to examine thread content, sentiment, and post popularity on Reddit, a popular networking forum site. We believe this choice in platform is both analytically and theoretically justified, as we are able to quickly glean large amounts of data from the site (within the restrictions of the Reddit API); its contents have already been shown to aid in predictive models of human behavior^[6]^, and; the platform is home to some of the negative sentiments we hope to examine, like misogyny.^[7]^
+
+# Project Overview
+We began our project with an exploratory case study of what we had hoped to be a polarizing and charged thread on Reddit. The intention was to practice scraping the web data, performing analyses and creating visualizations, and hopefully find some evidence or characteristics of polarization. However, we were less successful than we had hoped, and we encountered a number of analytic shortcomings along the way that helped pave future iterations of our search.
+
+Our initial Reddit thread was selected for the preliminary exploration because it contains the single most down-voted post on the history of the site. However, that was not indicative of the polarization we were looking for. In fact, the extremely unpopular opinion that originally attracted us to the thread was likely the reason we were unsuccessful: in being such an unpopular opinion, there is a consensus among users. Since everyone agreed to dislike the post, there wasn't much room for polarization. We then rethought the strategy, instead turning towards threads based on their topic, rather than basing the decision off a metric like post popularity. We turned to two more polarizing themes: climate change and politics.^[8]^
+
+In this report, we'll present the process that we developed from the preliminary case study, "EA's Blunder," interesting findings and visualizations from a few other threads we analyzed, and share a couple digressions that briefly outline some tried, and failed, ideas.
+
+# Case Study: EA's Blunder
+Although this case study was ultimately relatively uninformative, we include it in this report as it illustrates our initial work of scraping web data, creating necessary ancillary and analytic variables, and the process and thinking behind the decision to turn our attention elsewhere. Further, it was the topic originally outlined in our project proposal, so we felt the need to give it some attention.
+
+## Thread Background
+In 2017, Electronic Arts (EA) released the sequel to a popular videogame - Battlefront II. Unlike its prequel, the game was relatively unpopular and generated a lot of backlash from the gaming community. One player took to Reddit to express their disdain, and EA issued a response. The specific complaint that they responded to dealt with a player mentioning that Darth Vader, a popular character in the franchise, was locked behind a paywall, even after paying for the game. EA's response suggested that their thinking behind this decision was to help players have a sense of "pride and accomplishment" for unlocking such characters. The thread text is below.^[9]^
+
+*Seriously? I paid 80$ to have Vader locked?* This is a joke. I'll be contacting EA support for a refund... I can't even playing f***ing Darth Vader?!?!? Disgusting. This age of "micro-transactions" has gone WAY too far. Leave it to EA though to stretch the boundaries.
+
+"The intent is to provide players with a sense of pride and accomplishment for unlocking different heroes.
+
+As for cost, we selected initial values based upon data from the Open Beta and other adjustments made to milestone rewards before launch. Among other things, we're looking at average per-player credit earn rates on a daily basis, and we'll be making constant adjustments to ensure that players have challenges that are compelling, rewarding, and of course attainable via gameplay. 
+
+We appreciate the candid feedback, and the passion the community has put forth around the current topics here on Reddit, our forums and across numerous social media outlets.
+
+--- EA Community Team"
+
+The original post has about 200,000 upvotes, while EA's response holds the record for downvotes, with a net score at nearly -700,000.
+
+## Data Scraping
+To assist in gathering data from Reddit, we found that any Reddit page can be 'converted' into the JSON format simply by adding a ".json" to the end of the URL. Using R, we imported the JSON file into a dataframe. However, the resulting structure was largely un-usable, as special characters within posts, usernames, or otherwise seemed to cause perturbation the structure of the data. However, after some online research, we were able to locate RedditExtractoR^[10]^, a data extraction toolkit that allowed us to quickly pull in the data. Comments were stored as a sub-table within the extracted data, and we were quickly able to clean up any messy imports.
+
+```{r caseStudy_dataScraping, echo=FALSE, include=FALSE}
+
+# Import Comments from Target Thread
+commentData <- tibble(get_thread_content("https://www.reddit.com/r/StarWarsBattlefront/comments/7cff0b/seriously_i_paid_80_to_have_vader_locked/dppum98/")$comments) %>% select(comment_id, comment, score)
+
+```
+
+## Modifying the Tibble
+After gathering the comments in a tibble, we were able to use the tidytext^[11]^ package to pass each comment through the Bing, NRC, and AFINN lexicons for future sentiment analysis. To do so, three copies of the commentData tibble were created, and each was passed through one of the three lexicons. A copy of the one-word-per-row sentiment data from each lexicon was retained for future analysis. An inner join combined the original commentData with all sentiment data. Note that both the Bing and NRC lexicons have positive and negative sentiment data, and both values were retained. Based on comment data, words like "game" and "hero" were added to a custom stop word library (in this thread, a "hero" is a functional unit of the game, and does not carry the positive connotation assigned to it by lexicons).
+
+After sentiment analysis information was completed, several additional variables were added to the dataset, including each post's parent popularity score (defined by the net up/down votes) and AFINN sentiment (which required some string manipulation of the comment_id using the stringr^[12]^ package), and a net sentiment score from both the Bing and NRC lexicons (defined as positive - negative). Below is a glimipse of the resulting tibble, which is used for all subsequent analyses.
+
+```{r caseStudy_sentAnalysis&cleaning, echo=FALSE, include=FALSE}
+
+# Custom Stopword Library
+modStop <- bind_rows(stop_words, tibble(c("gaming", "hero", "heroes", "ea", "pride", "accomplishment", "www", "https", "comment", "games", "comments"))%>%mutate(lexicon="MANUAL", word=`c(...)`)%>%select(word, lexicon))
+
+
+# Gather Sentiments for Each Comment from Bing, NRC, and AFINN 
+nrcRaw    <- commentData %>% unnest_tokens(word, comment) %>% anti_join(bind_rows(modStop)) %>% inner_join(get_sentiments("nrc")) 
+afinnRaw  <- commentData %>% unnest_tokens(word, comment) %>% anti_join(modStop) %>% inner_join(get_sentiments("afinn"))
+bingRaw   <- commentData %>% unnest_tokens(word, comment) %>% anti_join(modStop) %>% inner_join(get_sentiments("bing")) 
+
+afinnJoin <- afinnRaw  %>% group_by(comment_id)         %>% summarize(afinn=sum(value))
+bingJoin  <- bingRaw   %>% count(comment_id, sentiment) %>% pivot_wider(values_from = "n", names_from = "sentiment")
+nrcJoin   <- nrcRaw    %>% count(comment_id, sentiment) %>% pivot_wider(values_from = "n", names_from = "sentiment") %>% 
+                           mutate(nrcPos=positive, nrcNeg=negative) %>% select(-`positive`, -`negative`)
+
+
+# Combine Data into a Working Tibble
+workingData <- inner_join(commentData, nrcJoin, by="comment_id") %>% inner_join(bingJoin, by="comment_id") %>% inner_join(afinnJoin, by="comment_id")
+
+# Calculate Ancillary Variables
+workingData <- workingData %>% mutate(nrcNetSent  = nrcPos - nrcNeg, 
+                                      bingNetSent = positive - negative,
+                                      parent_ID   = substr(comment_id, 1, regexpr("\\_[^\\_]*$", comment_id)-1))
+workingData <- workingData %>% mutate(parentNRC   = workingData[match(parent_ID, workingData$comment_id), 16], 
+                                      parentBing  = workingData[match(parent_ID, workingData$comment_id), 17],
+                                      parentScore = workingData[match(parent_ID, workingData$comment_id), 3], 
+                                      logScore    = log(abs(score))) %>% mutate_all(~replace(., is.na(.), 0))
+
+```
+
+```{r caseStudy_glimpse, include=TRUE, echo=FALSE}
+glimpse(workingData)
+```
+
+## Exploring the Dataset {.tabset}
+To get a better understanding for the comment section of the thread we are working with, we created numerous visualizations that highlight frequences, descriptive, and trends in the data with respect to word frequency, post popularity, and post sentiment.
+
+### Descriptives: Sentiment
+First, to see an overall picture of the sentiment of the thread, we created a simple histogram that maps overall post sentiment. Since word negative/positive binaries tended to 'cancel out' more frequently than the afinn database, the afinn data was used in the below histogram. We see that many posts are concentrated around neutral overall sentiment, but the thread is generally skewed negative. This makes sense, given that most of the thread are individuals criticizing EA's response.
+
+```{r caseStudy_visualizations_sentiment1, echo=FALSE, include=TRUE, warnings=FALSE}
+
+ggplot(data=workingData, mapping=aes(afinn)) + geom_histogram(binwidth = 1) + labs(x="Overall Post Sentiment (AFINN Subscore)", y="Frequency (n, number of posts)", title = "Distribution of Post Sentiment", subtitle = "Case Study: StarWars Battlefront Reddit Thread")
+
+```
+
+
+We were also interested in leveraging the specific sentiment data provided by the NRC lexicon to see if specific sentiments were more or less frequently observed than others. Bear in mind when interpreting the below (multiple plots were joined together using the ggpubr^[13]^ package) the relative frequency of positve and negative posts. 
+
+```{r caseStudy_visualizations_sentiment2, echo=FALSE, include=TRUE, warnings=FALSE}
+data<- workingData %>% mutate(binary = ifelse(afinn>0, "Positive", "Negative"))
+
+anticipation <- ggplot(data=data, mapping=aes(anticipation, color=binary)) + geom_histogram(fill="white", alpha=0.5, position = "identity", binwidth = 1) + labs(y="Frequency", x="Anticipation Score (NRC)")
+
+joy <- ggplot(data=data, mapping=aes(joy, color=binary)) + geom_histogram(fill="white", alpha=0.5, position = "identity", binwidth = 1) + labs(y="Frequency", x="Joy Score (NRC)")
+
+surprise <- ggplot(data=data, mapping=aes(surprise, color=binary)) + geom_histogram(fill="white", alpha=0.5, position ="identity", binwidth = 1) + labs(y="Frequency", x="Surprise Score (NRC)")
+
+trust <- ggplot(data=data, mapping=aes(trust, color=binary)) + geom_histogram(fill="white", alpha=0.5, position = "identity", binwidth = 1) + labs(y="Frequency", x="Trust Score (NRC)")
+
+anger <- ggplot(data=data, mapping=aes(anger, color=binary)) + geom_histogram(fill="white", alpha=0.5, position = "identity", binwidth = 1) + labs(y="Frequency", x="Anger Score (NRC)")
+
+disgust <- ggplot(data=data, mapping=aes(disgust, color=binary)) + geom_histogram(fill="white", alpha=0.5, position = "identity", binwidth = 1) + labs(y="Frequency", x="Disgust Score (NRC)")
+
+fear <- ggplot(data=data, mapping=aes(fear, color=binary)) + geom_histogram(fill="white", alpha=0.5, position = "identity", binwidth = 1) + labs(y="Frequency", x="Fear Score (NRC)")
+
+sadness <- ggplot(data=data, mapping=aes(sadness, color=binary)) + geom_histogram(fill="white", alpha=0.5, position = "identity", binwidth = 1) + labs(y="Frequency", x="Sadness Score (NRC)")
+
+
+ggarrange(anticipation, joy, surprise, trust, anger, disgust, fear, sadness + rremove("y.text"), 
+          ncol = 3, nrow = 3)
+
+
+```
+
+### Descriptives: Word Frequencies
+To get a sense for major differences between negative and positive sentiment posts, we examined the top word frequencies of these posts and compared them against each other. We see words like "game," "community," "paid," and "access" are common in all posts, whereas words like "rewards," "grinding," "adult," and "accomplishment" appear more frequently in positive posts. On the other hand, aside from the vulgarity, words like "EA" and the name of the game appear more commonly in negative comments, perhaps because negative comments tend to complain more about the company's actions regarding the game, whereas positive comments focus on gameplay itself.
+
+``` {r caseStudy_visualizations_frequencies1, echo=FALSE, include=FALSE, warnings=FALSE}
+ 
+temp <- workingData %>% mutate(binary = ifelse(afinn>0, "Positive", "Negative")) %>% select(binary, comment) %>% unnest_tokens(word, comment) %>% mutate(word = str_extract(word, "[a-z']+")) %>% anti_join(stop_words) %>% count(binary, word) %>% group_by(binary) %>%  mutate(proportion = n / sum(n)) %>% select(-n) %>% pivot_wider(names_from = "binary", values_from = "proportion")
+
+ggplot(temp, aes(x=`Positive`, y=`Negative`)) + geom_point(color="slategray1") + geom_text(aes(label=word), color="slategray", check_overlap = TRUE) + scale_x_log10() + scale_y_log10() + geom_abline(color="steelblue4") + labs(x="Words in Positive Comments (proportion)", y="Words in Negative Comments (proportion)", title = "Word Frequency in Positive vs. Negative Sentiment Comments", subtitle = "Case Study: StarWars Battlefront Reddit Thread")
+
+
+```
+
+<!-- We also looked at words would be associated with posts that were given specific sentiments by the AFINN lexicon. In the below word clouds, created using the wordcloud package^[14]^, all words from a single comment are given the same weight, equal to the AFINN score of the comment; in creating the clouds this way, we are looking at works that appear in posts with overall sentiment in the AFINN categories, rather than just creating word clouds of words AFINN associates with particular sentiments. -->
+
+<!-- ```{r caseStudy_visualizations_frequencies2, echo=FALSE, include=FALSE, warnings=FALSE} -->
+
+<!-- par(mfrow=c(4,2)) # for 1 row, 2 cols -->
+
+<!-- anticipation <- wordcloud(words=(workingData %>% select(comment, anticipation) %>% unnest_tokens(word, comment)  %>% mutate(word = str_extract(word, "[a-z']+")) %>% anti_join(modStop, by = "word") %>% count(anticipation, word) %>% mutate(weight = anticipation * n) %>% select(word, weight) %>% group_by(word) %>% mutate(tot = sum(weight)) %>% select(word, tot) %>% distinct() %>% filter(tot >0)%>%anti_join(modStop))$word, freq=(workingData %>% select(comment, anticipation) %>% unnest_tokens(word, comment)  %>% mutate(word = str_extract(word, "[a-z']+")) %>% anti_join(modStop, by = "word") %>% count(anticipation, word) %>% mutate(weight = anticipation * n) %>% select(word, weight) %>% group_by(word) %>% mutate(tot = sum(weight)) %>% select(word, tot) %>% distinct() %>% filter(tot >0)%>%anti_join(modStop))$tot, max.words = 100, scale = c(1,2)) -->
+
+<!-- joy <- wordcloud(words=(workingData %>% select(comment, joy) %>% unnest_tokens(word, comment)  %>% mutate(word = str_extract(word, "[a-z']+")) %>% anti_join(modStop, by = "word") %>% count(joy, word) %>% mutate(weight = joy * n) %>% select(word, weight) %>% group_by(word) %>% mutate(tot = sum(weight)) %>% select(word, tot) %>% distinct() %>% filter(tot >0)%>%anti_join(modStop))$word, freq=(workingData %>% select(comment, joy) %>% unnest_tokens(word, comment)  %>% mutate(word = str_extract(word, "[a-z']+")) %>% anti_join(modStop, by = "word") %>% count(joy, word) %>% mutate(weight = joy * n) %>% select(word, weight) %>% group_by(word) %>% mutate(tot = sum(weight)) %>% select(word, tot) %>% distinct() %>% filter(tot >0)%>%anti_join(modStop))$tot, max.words = 100) -->
+
+<!-- surprise <- wordcloud(words=(workingData %>% select(comment, surprise) %>% unnest_tokens(word, comment)  %>% mutate(word = str_extract(word, "[a-z']+")) %>% anti_join(modStop, by = "word") %>% count(surprise, word) %>% mutate(weight = surprise * n) %>% select(word, weight) %>% group_by(word) %>% mutate(tot = sum(weight)) %>% select(word, tot) %>% distinct() %>% filter(tot >0)%>%anti_join(modStop))$word, freq=(workingData %>% select(comment, surprise) %>% unnest_tokens(word, comment)  %>% mutate(word = str_extract(word, "[a-z']+")) %>% anti_join(modStop, by = "word") %>% count(surprise, word) %>% mutate(weight = surprise * n) %>% select(word, weight) %>% group_by(word) %>% mutate(tot = sum(weight)) %>% select(word, tot) %>% distinct() %>% filter(tot >0)%>%anti_join(modStop))$tot, max.words = 100) -->
+
+<!-- trust <- wordcloud(words=(workingData %>% select(comment, trust) %>% unnest_tokens(word, comment)  %>% mutate(word = str_extract(word, "[a-z']+")) %>% anti_join(modStop, by = "word") %>% count(trust, word) %>% mutate(weight = trust * n) %>% select(word, weight) %>% group_by(word) %>% mutate(tot = sum(weight)) %>% select(word, tot) %>% distinct() %>% filter(tot >0)%>%anti_join(modStop))$word, freq=(workingData %>% select(comment, trust) %>% unnest_tokens(word, comment)  %>% mutate(word = str_extract(word, "[a-z']+")) %>% anti_join(modStop, by = "word") %>% count(trust, word) %>% mutate(weight = trust * n) %>% select(word, weight) %>% group_by(word) %>% mutate(tot = sum(weight)) %>% select(word, tot) %>% distinct() %>% filter(tot >0)%>%anti_join(modStop))$tot, max.words = 100) -->
+
+<!-- anger <- wordcloud(words=(workingData %>% select(comment, anger) %>% unnest_tokens(word, comment)  %>% mutate(word = str_extract(word, "[a-z']+")) %>% anti_join(modStop, by = "word") %>% count(anger, word) %>% mutate(weight = anger * n) %>% select(word, weight) %>% group_by(word) %>% mutate(tot = sum(weight)) %>% select(word, tot) %>% distinct() %>% filter(tot >0)%>%anti_join(modStop))$word, freq=(workingData %>% select(comment, anger) %>% unnest_tokens(word, comment)  %>% mutate(word = str_extract(word, "[a-z']+")) %>% anti_join(modStop, by = "word") %>% count(anger, word) %>% mutate(weight = anger * n) %>% select(word, weight) %>% group_by(word) %>% mutate(tot = sum(weight)) %>% select(word, tot) %>% distinct() %>% filter(tot >0)%>%anti_join(modStop))$tot, max.words = 100) -->
+
+<!-- fear <- wordcloud(words=(workingData %>% select(comment, fear) %>% unnest_tokens(word, comment)  %>% mutate(word = str_extract(word, "[a-z']+")) %>% anti_join(modStop, by = "word") %>% count(fear, word) %>% mutate(weight = fear * n) %>% select(word, weight) %>% group_by(word) %>% mutate(tot = sum(weight)) %>% select(word, tot) %>% distinct() %>% filter(tot >0)%>%anti_join(modStop))$word, freq=(workingData %>% select(comment, fear) %>% unnest_tokens(word, comment)  %>% mutate(word = str_extract(word, "[a-z']+")) %>% anti_join(modStop, by = "word") %>% count(fear, word) %>% mutate(weight = fear * n) %>% select(word, weight) %>% group_by(word) %>% mutate(tot = sum(weight)) %>% select(word, tot) %>% distinct() %>% filter(tot >0)%>%anti_join(modStop))$tot, max.words = 100) -->
+
+<!-- disgust <- wordcloud(words=(workingData %>% select(comment, disgust) %>% unnest_tokens(word, comment)  %>% mutate(word = str_extract(word, "[a-z']+")) %>% anti_join(modStop, by = "word") %>% count(disgust, word) %>% mutate(weight = disgust * n) %>% select(word, weight) %>% group_by(word) %>% mutate(tot = sum(weight)) %>% select(word, tot) %>% distinct() %>% filter(tot >0)%>%anti_join(modStop))$word, freq=(workingData %>% select(comment, disgust) %>% unnest_tokens(word, comment)  %>% mutate(word = str_extract(word, "[a-z']+")) %>% anti_join(modStop, by = "word") %>% count(disgust, word) %>% mutate(weight = disgust * n) %>% select(word, weight) %>% group_by(word) %>% mutate(tot = sum(weight)) %>% select(word, tot) %>% distinct() %>% filter(tot >0)%>%anti_join(modStop))$tot, max.words = 100) -->
+
+<!-- sadness <- wordcloud(words=(workingData %>% select(comment, sadness) %>% unnest_tokens(word, comment)  %>% mutate(word = str_extract(word, "[a-z']+")) %>% anti_join(modStop, by = "word") %>% count(sadness, word) %>% mutate(weight = sadness * n) %>% select(word, weight) %>% group_by(word) %>% mutate(tot = sum(weight)) %>% select(word, tot) %>% distinct() %>% filter(tot >0)%>%anti_join(modStop))$word, freq=(workingData %>% select(comment, sadness) %>% unnest_tokens(word, comment)  %>% mutate(word = str_extract(word, "[a-z']+")) %>% anti_join(modStop, by = "word") %>% count(sadness, word) %>% mutate(weight = sadness * n) %>% select(word, weight) %>% group_by(word) %>% mutate(tot = sum(weight)) %>% select(word, tot) %>% distinct() %>% filter(tot >0)%>%anti_join(modStop))$tot, max.words = 100, scale=c(3.5,0.25), colors = brewer.pal(12, "Blues")) -->
+
+
+### Trends: Popularity
+We also wanted to understand how certain trends (word frequencies, sentiments) changed based on a post's popularity. Because of the large spread of post popularity, we instead took the log of popularity to give us a more even spread. In this thread, the only comment that had negative popularity was EA's post, so we took the absolute value to convey that this post was, indeed, popular.
+
+```{r caseStudy_visualizations_popularity1, echo=FALSE, include=TRUE, warnings=FALSE}
+
+par(mfrow=c(1,2))
+hist(workingData$score)
+hist(log(abs(workingData$score)))
+
+
+```
+
+We examined the sentiment score of a post and its popularity. Based on the below plots, none of the sentiment scores from any lexicon seemed to show a relationship between the post's sentiment and its popularity.
+
+```{r caseStudy_visualizations_popularity2, echo=FALSE, include=TRUE, warnings=FALSE}
+
+ggarrange(ggplot(data=workingData, mapping=aes(afinn, logScore)) + geom_point() + labs(x="Post Overall Sentiment (afinn)", y="Popularity (Log Scale)"), ggplot(data=workingData, mapping=aes(nrcNetSent, logScore)) + geom_point() + labs(x="Post Overall Sentiment (nrc)", y="Popularity (Log Scale)"),ggplot(data=workingData, mapping=aes(bingNetSent, logScore)) + geom_point() + labs(x="Post Overall Sentiment (bing)", y="Popularity (Log Scale)"), ncol = 3)
+
+
+```
+
+## Case Study Takeaways, Lessons Learned
+During this initial exploration, our analyses did not lead us to any solid conclusions about internet polarization. For instance, there wasn't a clear distinction in language or sentiment between popular and unpopular posts, and the relationships between what a post responds to and its outcome were generally inconclusive (see the digression on predictive modeling for more information).
+
+However, we were able to identify some lessons and potential shortcomings that pointed us towards next steps. First, we were not entirely satisfied with the "overall sentiment" measures for each comment. Part of this was because of the length of the comments; posts were relatively short, and only a fraction of the words in any given post were able to be classified by a lexicon. This is why we greatly preferred the use of the afinn lexicon, since it gave us slightly more room to work with as it spread scores out a bit more. 
+
+Another complication to the sentiment classification was the use of sarcasm. In prelimiary analyses of the comment data, we attempted to classify data based on its sentiment and the popularity of the post it responded to. Our thinking was that negative replies to unpopular opinions would receive more likes, and vice versa (like 'bashing' on a bad idea or complimenting something popular). We examined the distribution of likes for these categories:
+
+```{r caseStudy_lessons_sarcasm, echo=FALSE, include=TRUE, warnings=FALSE}
+
+NegtoUnpop <- workingData %>% filter(parentScore < 0, nrcNetSent < 0) %>% mutate(cat="Neg Response to Unpop Post")
+PostoPop   <- workingData %>% filter(parentScore > 150, nrcNetSent > 0) %>% mutate(cat="Pos Response to Pop Post")
+PostoUnpop <- workingData %>% filter(parentScore < 0, nrcNetSent > 0) %>% mutate(cat="Pos Response to Unpop Post")
+NegtoPop   <- workingData %>% filter(parentScore > 150, nrcNetSent < 0) %>% mutate(cat="Neg Response to Pop Post")
+ggplot(data=(bind_rows(NegtoUnpop, PostoPop, PostoUnpop, NegtoPop)), mapping = aes(x=score, y=cat), color=parentPopularity) + geom_point() + labs(x="Post Popularity (Votes)", y="Comment Category", title = "Distribution of Likes by Comment Category", subtitle = "Case Study: StarWars Battlefront Reddit Thread")
+
+```
+
+If you examine the post with the most likes (this dataset excludes EA's post), you see it is categorized as a positive response to an unpopular post. The unpopular post it replies to is EA's comment, however, the post is *not* positive, it just looks that way to lexicons. The post reads: “I wonder if Burger King wants to sell me a sense of pride and accomplishment by making me work 10 hours for my f**king fries." Understandably, the lexicon was unable to account for sarcasm, so analyses using this structure were inaccurate.
+
+# Broader Exploration: "The Weather and Everybody's Health"
+In the 1964 film adaptation *My Fair Lady*, phonetics professor Henry Higgins make a bet that he could convince the English court that flower seller Eliza Doolittle was a member of the upper class by teaching her to "speak." When Eliza heads to the Embassy Ball, Prof. Higgins shares with his friend, "I taught her how to speak properly. She has strict instructions as to her behavior. She's to keep to two subjects: the weather and everybody's health." Although at the time, these two subjects were used to help Eliza make a good impression, healthcare, climate change, and politics are now decisive issues in public discourse.
+
+To continue our search, and use some of the findings from our initial thread analysis, we decided to look at threads that deal with topics like these. For instance, although we selected the Battlefront thread because it had an extremely unpopular opinion, this was perhaps the exact reason we *shouldn't* have: everyone disagrees with it, so there isn't much difference of opinion.
+
+## In Brief: Other Analyzed Threads {.tabset}
+We decided to look at Climate Change and Politics since those topics were the most polarized topics. The climate change model came from a reddit thread called “Are you concerned about climate change?" About 1.2k comments — using the same process, we see similar relationships (note that not all are statistically significant). In this case, parent popularity plays almost no role in determining how popular a post will be, but posts that respond to unpopular comments tend to get more likes. Similar to star wars, the sentiment of the post isn’t a big indicator in this model. 
+
+The politics was extracted from a thread about politician Matt Dolan. In creating the same model, we see once again that parent popularity plays a role (similar to star wars thread), but parent sentiment does not contribute anything meaningful to this model. This might make sense, given that it takes a lot to ‘break through’ in discussions about politics, so you might need to comment on a popular thread in order to be seen, which might also have something to do about the size of the thread; this thread is very recent (still being updated) and is approaching 2.5k comments
+
+### Climate Change
+Because of ongoing controversy surrounding this topic, we selected a tread called "I'm Afraid Climate Change is Going to Kill Me!" on Reddit to hopefully capture a some more charged language (that might help us get a wider, more accurate spread on our sentiment analysis). After importing the data, we created the following visualizations to get a sense of what this data can tell us.
+
+```{r climate_import, echo=FALSE, include=FALSE}
+
+# Import Comments from Target Thread
+ccommentData <- tibble(get_thread_content("https://www.reddit.com/r/climatechange/comments/aqdmbz/im_afraid_climate_change_is_going_to_kill_me_help/")$comments) %>% select(comment_id, comment, score)
+
+# Gather Sentiments for Each Comment from Bing, NRC, and AFINN 
+cnrcRaw    <- ccommentData %>% unnest_tokens(word, comment) %>% anti_join(bind_rows(modStop)) %>% inner_join(get_sentiments("nrc")) 
+cafinnRaw  <- ccommentData %>% unnest_tokens(word, comment) %>% anti_join(modStop) %>% inner_join(get_sentiments("afinn"))
+cbingRaw   <- ccommentData %>% unnest_tokens(word, comment) %>% anti_join(modStop) %>% inner_join(get_sentiments("bing")) 
+
+cafinnJoin <- cafinnRaw  %>% group_by(comment_id)         %>% summarize(afinn=sum(value))
+cbingJoin  <- cbingRaw   %>% count(comment_id, sentiment) %>% pivot_wider(values_from = "n", names_from = "sentiment")
+cnrcJoin   <- cnrcRaw    %>% count(comment_id, sentiment) %>% pivot_wider(values_from = "n", names_from = "sentiment") %>% 
+                           mutate(nrcPos=positive, nrcNeg=negative) %>% select(-`positive`, -`negative`)
+
+
+# Combine Data into a Working Tibble
+cworkingData <- inner_join(ccommentData, cnrcJoin, by="comment_id") %>% inner_join(cbingJoin, by="comment_id") %>% inner_join(cafinnJoin, by="comment_id")
+
+# Calculate Ancillary Variables
+cworkingData <- cworkingData %>% mutate(nrcNetSent  = nrcPos - nrcNeg, 
+                                      bingNetSent = positive - negative,
+                                      parent_ID   = substr(comment_id, 1, regexpr("\\_[^\\_]*$", comment_id)-1))
+cworkingData <- cworkingData %>% mutate(parentNRC   = workingData[match(parent_ID, workingData$comment_id), 16], 
+                                      parentBing  = workingData[match(parent_ID, workingData$comment_id), 17],
+                                      parentScore = workingData[match(parent_ID, workingData$comment_id), 3], 
+                                      logScore    = log(abs(score))) %>% mutate_all(~replace(., is.na(.), 0))
+
+```
+
+We looked to see the most common words across all comments within this Reddit thread. Given some of the news around this topic, we were happy to see some of the words that came up. We used the wordcloud package^[14]^ to generate the below figure.
+```{r climate_1, echo=FALSE, include=TRUE}
+tmp <- ccommentData %>% unnest_tokens(word, comment) %>% select(word) %>% anti_join(modStop, by="word") %>% count(word, sort=TRUE)
+wordcloud(words = tmp$word, freq=tmp$n, colors = brewer.pal(8, "Dark2"), max.words = 100)
+
+
+```
+
+We also wanted to look for some aspects of the "two sides" to climate change, and examined the most popular words among popular and unpopular opinions, based on the post's score. Although the chart is skewed, we believe it begins to demonstrate some aspects of polarization that we were looking for. In comments that have a negative popularity score (more downvotes than upvotes), we see terms like "manufactured," "scientists," and "fear." We were particularly interested in seeing the term "believing," which likely references the idea that some do not view climate change as a fact, but as a belief.
+
+```{r climate_2, echo=FALSE, include=TRUE}
+
+temp <- cworkingData %>% mutate(binary = ifelse(score>0, "Positive", "Negative")) %>% select(binary, comment) %>% unnest_tokens(word, comment) %>% mutate(word = str_extract(word, "[a-z']+")) %>% anti_join(stop_words) %>% count(binary, word) %>% group_by(binary) %>%  mutate(proportion = n / sum(n)) %>% select(-n) %>% pivot_wider(names_from = "binary", values_from = "proportion")
+
+ggplot(temp, aes(x=`Positive`, y=`Negative`)) + geom_point(color="slategray1") + geom_text(aes(label=word), color="slategray", check_overlap = TRUE) + scale_x_log10() + scale_y_log10() + geom_abline(color="steelblue4") + labs(x="Words in Upvoted Comments (proportion)", y="Words in Downvoted Comments (proportion)", title = "Word Frequency in Populary vs. Unpopular Sentiment Comments", subtitle = "Climate Change Reddit Thread")
+
+
+
+
+```
+
+We were curious to see the context of the term "manufactured," since it could possibly refer to manufacturing companies emitting CO2 gasses, but we had a hunch that it might be calling climate change a manufactured belief. These were 4 comments in which this word appeared. Of these, three specifically referenced an article calling the manufactured climate crisis a form of child abuse, and the other wrote "The manufactured climate crises hysteria is a topic for Agnotology - the study of how ignorance arises via circulation of misinformation calculated to mislead." It struck us that in looking for polarizing posts, we found posts that reference polarization and misinformation themselves.
+
+
+### Politics
+In our search of a political Reddit thread, we attempted to use topic modeling to see if that would help us get at the "two sides" component of many polarizing issues. We selected a thread that would have a balance of republican and democratic views and used LDA to divide into two topics. **Note:** In light of recent developments, the analyses in this section were swapped out to a thread focusing on the potential overruling of the supreme court's Roe v. Wade decision, which would greatly restrict women's access to reproductive healthcare and abortions.
+
+```{r politics_import, echo=FALSE, include=FALSE}
+
+# Import Comments from Target Thread
+pcommentData <- tibble(get_thread_content("https://www.reddit.com/r/AskReddit/comments/uh4q9w/americans_of_reddit_what_are_your_thoughts_on_roe/")$comments) %>% select(comment_id, comment, score)
+
+tmp <- pcommentData %>% select(comment_id, comment) %>% unnest_tokens(word, comment) %>% mutate(word = str_extract(word, "[a-z']+")) %>% anti_join(stop_words) %>% mutate_all(~replace(., is.na(.), 0)) %>% group_by(comment_id) %>% count(word)
+
+tmp <- cast_dtm(tmp, comment_id, word, n)
+
+modelraw <- LDA(tmp, k=2, method="gibbs")
+modeltidy <-  tidy(modelraw, matrix="beta")
+topterms <- modeltidy %>% group_by(topic) %>% slice_max(beta, n=10) %>% select(topic, term)
+topterms
+
+
+```
+
+## Digression: Predictive Modeling 
+In looking for patterns and indicators of polarization in our Reddit data, we understood that a key step in a post becoming polarizing was its need to become popular. No matter how charged a statement or effective a message is, it needs to be viewed in order to have polarizing effects. In early portions of this project, we attempted to look for predictive models for a post's popularity, using its sentiment and the sentiment and popularity of its parent as predictors. We created this model using the Star Wars Battlefront Reddit thread from the case study using a Poisson GLM:
+
+```{r digression_modeling_1, echo=FALSE, include=TRUE, warning=FALSE}
+
+commentData <- get_thread_content("https://www.reddit.com/r/StarWarsBattlefront/comments/7cff0b/seriously_i_paid_80_to_have_vader_locked/dppum98/")$comments
+workingDF <- commentData %>% mutate(wdcount = str_count(comment, '\\w+')) %>% select(comment_id, comment, score) 
+
+# Gather Sentiments for Each Comment from Bing and NRC 
+sentTemp <- workingDF %>% unnest_tokens(word, comment) %>% anti_join(stop_words%>%filter(word!="game", word!="gaming")) %>% inner_join(get_sentiments("nrc")) %>% count(comment_id, sentiment) %>% pivot_wider(values_from = "n", names_from = "sentiment")
+posnegTemp <- temp <- workingDF %>% unnest_tokens(word, comment) %>% anti_join(stop_words%>%filter(word!="game", word!="gaming")) %>% inner_join(get_sentiments("bing")) %>% count(comment_id, sentiment) %>% pivot_wider(values_from = "n", names_from = "sentiment")
+
+# Combine Data into a Working Tibble
+workingData <- inner_join(workingDF, sentTemp, by ="comment_id") %>% inner_join(workingDF, posnegTemp, by ="comment_id") %>% mutate_all(~replace(., is.na(.), 0)) %>% mutate(text = comment.x, popScore = score.x) %>% mutate(text = `comment.x`, popScore = `score.x`) %>% select(-`comment.x`, -`comment.y`, -`score.x`, -`score.y`)
+
+# Calculate Ancillary Variables
+workingData <- workingData %>% mutate(overallSentiment = positive - negative, 
+                                      parent_ID = substr(comment_id, 1, regexpr("\\_[^\\_]*$", comment_id)-1))
+workingData <- workingData %>% mutate(parentSentiment = workingData[match(parent_ID, workingData$comment_id), 14], 
+                                      parentPopularity = workingData[match(parent_ID, workingData$comment_id), 13], 
+                                      absPop = abs(popScore))
+
+# Developing the Model
+workingModel <- glm(popScore ~ overallSentiment + parentSentiment + parentPopularity, data=workingData, family="poisson")
+summary(workingModel)
+
+```
+
+We were happy that our model coefficients were relatively significant; however, the are all very close to zero. We instead tried using the log of the popularity and creating a Gaussian linear model using posts that we believed to be potentially polarizing (where the sentiment of the post and the popularity of its parent were aligned). In both cases, our model was unhelpful.
+
+We also attempted to compare coefficients across models with little success. Although levels of significance were varied, there seemed to be some alignment that unpopular posts (those with negative scores) lend themselves to more popular comment sections. This made sense to us, given that the opportunity to post a witty response or a 'clapback' to something you disagree with seems like an opportunity to go viral. It also reminded us of the interesting connection that is being studied between social media algorithms and negativity bias. Also, the sentiment of a post seems to be less important when predicting its potential popularity. There was a minute coefficient for post sentiment in the models; we were even more cautious in interpreting this finding given the shortcomings of sentiment analysis discussed with the case study.
+
+# References
+
+[1] Matamoros-Fernández, A., & Farkas, J. (2021). Racism, Hate Speech, and Social Media: A Systematic Review and Critique. *Television & New Media, 22*(2), 205–224. https://doi.org/10.1177/1527476420982230
+
+[2] Chenzi, V. (2021). Fake news, social media and xenophobia in South Africa. *African Identities, 19*(4), 502-521. https://doi.org/10.1080/14725843.2020.1804321 
+
+[3] Ștefăniță, O., & Buf, D.-M.. (2021). Hate Speech in Social Media and Its Effects on the LGBT Community: A Review of the Current Research. *Romanian Journal of Communication and Public Relations, 23*(1), 47. https://doi.org/10.21018/rjcpr.2021.1.322
+
+[4] Tucker, Guess, A., Barbera, P., Vaccari, C., Siegel, A., Sanovich, S., Stukal, D., & Nyhan, B. (2018). Social Media, Political Polarization, and Political Disinformation: A Review of the Scientific Literature. *SSRN Electronic Journal.* https://doi.org/10.2139/ssrn.3144139
+
+[5] R Core Team (2022). R: A language and environment for statistical computing. R Foundation for Statistical Computing, Vienna, Austria. URL https://www.R-project.org/.
+
+[6] Gjurković, M., & Šnajder, J. (2018). *Reddit: A Gold Mine for Personality Prediction.* https://doi.org/10.18653/v1/W18-1112 
+
+[7] Farrell, T., Fernandez, M., Novotny, J., & Alani, H. (2019). *Exploring Misogyny across the Manosphere in Reddit* Proceedings of the 10th ACM Conference on Web Science, Boston, Massachusetts, USA. https://doi.org/10.1145/3292522.3326045
+
+[8] Kubin, E., & von Sikorski, C. (2021). The role of (social) media in political polarization: a systematic review. *Annals of the International Communication Association, 45*(3), 188-206. https://doi.org/10.1080/23808985.2021.1976070 
+
+[9] Reddit's Most Downvoted Comment: https://www.reddit.com/r/StarWarsBattlefront/comments/7cff0b/seriously_i_paid_80_to_have_vader_locked/dppum98/
+
+[10] Rivera, Ivan (2022). RedditExtractoR: Reddit Data Extraction Toolkit. R package version 3.0.6. https://CRAN.R-project.org/package=RedditExtractoR
+
+[11] Silge J, Robinson D (2016). “tidytext: Text Mining and Analysis Using Tidy Data Principles in R.” _JOSS_,
+*1*(3). doi: 10.21105/joss.00037 (URL: https://doi.org/10.21105/joss.00037), <URL:
+http://dx.doi.org/10.21105/joss.00037>.
+
+[12] Wickham, Hadley (2019). stringr: Simple, Consistent Wrappers for Common String Operations. R package version 1.4.0.
+  https://CRAN.R-project.org/package=stringr
+  
+[13] Kassambara, Alboukadel (2020). ggpubr: 'ggplot2' Based Publication Ready Plots. R package version 0.4.0.
+  https://CRAN.R-project.org/package=ggpubr
+  
+[14] Fellows, Ian (2018). wordcloud: Word Clouds. R package version 2.6. https://CRAN.R-project.org/package=wordcloud
