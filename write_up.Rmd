@@ -302,7 +302,23 @@ topterms <- modeltidy %>% group_by(topic) %>% slice_max(beta, n=10) %>% select(t
 topterms
 
 
+
+
+
 ```
+
+We do believe our model came back with something useful; as topic 1 seems to focus more on the pregnant person and the second focuses more on abortions themselves. Just from this model, we do see some traces of the two sides of this issue. To further examine this, we look more graphically at the distribution of words:
+
+```{r politics_2, echo=FALSE, include=TRUE}
+
+topterms <- modeltidy %>% group_by(topic) %>% pivot_wider(names_from = "topic", values_from = "beta") %>% mutate(`Topic 1` = `1`, `Topic 2` = `2`)
+
+ggplot(topterms, aes(x=`1`, y=`2`)) + geom_point(color="slategray1") + geom_text(aes(label=term), color="slategray", check_overlap = TRUE) + scale_x_log10() + scale_y_log10() + geom_abline(color="steelblue4") + labs(x="Words in Topic 1", y="Words in Topic 2", title = "Words in Topic 1 & Topic 2", subtitle = "Roe v. Wade Reddit Thread")
+
+
+
+```
+
 
 ## Digression: Predictive Modeling 
 In looking for patterns and indicators of polarization in our Reddit data, we understood that a key step in a post becoming polarizing was its need to become popular. No matter how charged a statement or effective a message is, it needs to be viewed in order to have polarizing effects. In early portions of this project, we attempted to look for predictive models for a post's popularity, using its sentiment and the sentiment and popularity of its parent as predictors. We created this model using the Star Wars Battlefront Reddit thread from the case study using a Poisson GLM:
