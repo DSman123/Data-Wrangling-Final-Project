@@ -164,7 +164,9 @@ difficult to distinguish between negative parent and depth in the thread:
 
 
 ## In Brief: Other Analyzed Threads
-We decided to look at Climate Change and Politics since those topics were the most polar
+We decided to look at Climate Change and Politics since those topics were the most polarized topics. The climate change model came from a reddit thread called “Are you concerned about climate change?" About 1.2k comments — using the same process, we see similar relationships (note that not all are statistically significant). In this case, parent popularity plays almost no role in determining how popular a post will be, but posts that respond to unpopular comments tend to get more likes. Similar to star wars, the sentiment of the post isn’t a big indicator in this model. 
+
+The politics was extracted from a thread about politician Matt Dolan. In creating the same model, we see once again that parent popularity plays a role (similar to star wars thread), but parent sentiment does not contribute anything meaningful to this model. This might make sense, given that it takes a lot to ‘break through’ in discussions about politics, so you might need to comment on a popular thread in order to be seen, which might also have something to do about the size of the thread; this thread is very recent (still being updated) and is approaching 2.5k comments
 
 ## Assessing Model Applicability
 
