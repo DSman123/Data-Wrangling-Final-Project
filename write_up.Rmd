@@ -17,6 +17,7 @@ library(textdata)
 library(tidyverse)
 library(ggpubr)
 library(wordcloud)
+library(topicmodels)
 ```
 
 # Introduction
@@ -300,10 +301,6 @@ modelraw <- LDA(tmp, k=2, method="gibbs")
 modeltidy <-  tidy(modelraw, matrix="beta")
 topterms <- modeltidy %>% group_by(topic) %>% slice_max(beta, n=10) %>% select(topic, term)
 topterms
-
-
-
-
 
 ```
 
