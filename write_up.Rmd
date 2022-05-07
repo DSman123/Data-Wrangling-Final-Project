@@ -288,7 +288,7 @@ We were curious to see the context of the term "manufactured," since it could po
 ### Politics
 In our search of a political Reddit thread, we attempted to use topic modeling to see if that would help us get at the "two sides" component of many polarizing issues. We selected a thread that would have a balance of republican and democratic views and used LDA to divide into two topics. **Note:** In light of recent developments, the analyses in this section were swapped out to a thread focusing on the potential overruling of the supreme court's Roe v. Wade decision, which would greatly restrict women's access to reproductive healthcare and abortions.
 
-```{r politics_import, echo=FALSE, include=FALSE}
+```{r politics_import, echo=FALSE, include=TRUE}
 
 # Import Comments from Target Thread
 pcommentData <- tibble(get_thread_content("https://www.reddit.com/r/AskReddit/comments/uh4q9w/americans_of_reddit_what_are_your_thoughts_on_roe/")$comments) %>% select(comment_id, comment, score)
